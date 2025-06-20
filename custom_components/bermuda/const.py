@@ -204,6 +204,7 @@ DOCS[CONF_SCANNER_COORDS] = "Scanner x/y coordinates on the floor plan."
 CONF_DEVICE_COORDS = "device_coordinates"
 DOCS[CONF_DEVICE_COORDS] = "Device x/y coordinates pinned on the floor plan."
 
+
 # Defaults
 DEFAULT_NAME = DOMAIN
 

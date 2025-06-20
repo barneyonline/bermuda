@@ -39,6 +39,7 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.DEVICE_TRACKER,
     Platform.NUMBER,
+    Platform.CAMERA,
     # Platform.BUTTON,
     # Platform.SWITCH,
     # Platform.BINARY_SENSOR
@@ -193,6 +194,15 @@ DOCS[CONF_SMOOTHING_SAMPLES] = (
     "How many samples to average distance smoothing. Bigger numbers"
     " make for slower distance increases. 10 or 20 seems good."
 )
+
+CONF_FLOORPLAN_IMAGE = "floorplan_image"
+DOCS[CONF_FLOORPLAN_IMAGE] = "Path to the uploaded floor plan image."
+
+CONF_SCANNER_COORDS = "scanner_coordinates"
+DOCS[CONF_SCANNER_COORDS] = "Scanner x/y coordinates on the floor plan."
+
+CONF_DEVICE_COORDS = "device_coordinates"
+DOCS[CONF_DEVICE_COORDS] = "Device x/y coordinates pinned on the floor plan."
 
 # Defaults
 DEFAULT_NAME = DOMAIN

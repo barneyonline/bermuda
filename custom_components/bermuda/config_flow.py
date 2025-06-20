@@ -13,6 +13,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.selector import (
     DeviceSelector,
     DeviceSelectorConfig,
+    FileSelector,
+    FileSelectorConfig,
     ObjectSelector,
     SelectOptionDict,
     SelectSelector,
@@ -25,13 +27,16 @@ from .const import (
     ADDR_TYPE_PRIVATE_BLE_DEVICE,
     BDADDR_TYPE_RANDOM_RESOLVABLE,
     CONF_ATTENUATION,
+    CONF_DEVICE_COORDS,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
+    CONF_FLOORPLAN_IMAGE,
     CONF_MAX_RADIUS,
     CONF_MAX_VELOCITY,
     CONF_REF_POWER,
     CONF_RSSI_OFFSETS,
     CONF_SAVE_AND_CLOSE,
+    CONF_SCANNER_COORDS,
     CONF_SCANNER_INFO,
     CONF_SCANNERS,
     CONF_SMOOTHING_SAMPLES,
@@ -190,6 +195,8 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
                 "selectdevices": "Select Devices",
                 "calibration1_global": "Calibration 1: Global",
                 "calibration2_scanners": "Calibration 2: Scanner RSSI Offsets",
+                "floorplan": "Floor Plan",
+                "devicecoords": "Device Locations",
             },
             description_placeholders=messages,
         )
@@ -556,6 +563,46 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
             data_schema=vol.Schema(data_schema),
             description_placeholders={"suffix": results_str},
         )
+
+    async def async_step_floorplan(self, user_input=None):
+        """Configure the floor plan image and scanner coordinates."""
+        if user_input is not None:
+            self.options.update(user_input)
+            return await self._update_options()
+
+        data_schema = {
+            vol.Optional(
+                CONF_FLOORPLAN_IMAGE,
+                default=self.options.get(CONF_FLOORPLAN_IMAGE),
+            ): FileSelector(FileSelectorConfig(accept="image/*")),
+            vol.Optional(
+                CONF_SCANNER_COORDS,
+                default=self.options.get(CONF_SCANNER_COORDS, {}),
+            ): ObjectSelector(),
+        }
+
+        return self.async_show_form(
+            step_id="floorplan",
+            data_schema=vol.Schema(data_schema),
+        )
+
+    async def async_step_devicecoords(self, user_input=None):
+        """Record device coordinates on the floor plan."""
+        if user_input is not None:
+            device = self._get_bermuda_device_from_registry(user_input[CONF_DEVICES])
+            if device is not None:
+                coords = self.options.get(CONF_DEVICE_COORDS, {})
+                coords[device.address] = [user_input["coord_x"], user_input["coord_y"]]
+                self.options[CONF_DEVICE_COORDS] = coords
+                return await self._update_options()
+
+        data_schema = {
+            vol.Required(CONF_DEVICES): DeviceSelector(DeviceSelectorConfig(integration=DOMAIN)),
+            vol.Required("coord_x", default=0.0): vol.Coerce(float),
+            vol.Required("coord_y", default=0.0): vol.Coerce(float),
+        }
+
+        return self.async_show_form(step_id="devicecoords", data_schema=vol.Schema(data_schema))
 
     def _get_bermuda_device_from_registry(self, registry_id: str) -> BermudaDevice | None:
         """

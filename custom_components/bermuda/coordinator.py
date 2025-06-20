@@ -383,17 +383,25 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
             file_path = self.hass.config.path(
                 f"custom_components/{DOMAIN}/manufacturer_identification/member_uuids.yaml"
             )
-            async with aiofiles.open(file_path) as f:
-                mi_yaml = yaml.safe_load(await f.read())["uuids"]
-            self.member_uuids: dict[int, str] = {member["uuid"]: member["name"] for member in mi_yaml}
+            try:
+                async with aiofiles.open(file_path) as f:
+                    mi_yaml = yaml.safe_load(await f.read())["uuids"]
+            except (FileNotFoundError, KeyError, yaml.YAMLError) as exc:
+                _LOGGER.warning("Failed loading %s: %s", file_path, exc)
+            else:
+                self.member_uuids = {member["uuid"]: member["name"] for member in mi_yaml}
 
             # https://bitbucket.org/bluetooth-SIG/public/src/main/assigned_numbers/company_identifiers/company_identifiers.yaml
             file_path = self.hass.config.path(
                 f"custom_components/{DOMAIN}/manufacturer_identification/company_identifiers.yaml"
             )
-            async with aiofiles.open(file_path) as f:
-                ci_yaml = yaml.safe_load(await f.read())["company_identifiers"]
-            self.company_uuids: dict[int, str] = {member["value"]: member["name"] for member in ci_yaml}
+            try:
+                async with aiofiles.open(file_path) as f:
+                    ci_yaml = yaml.safe_load(await f.read())["company_identifiers"]
+            except (FileNotFoundError, KeyError, yaml.YAMLError) as exc:
+                _LOGGER.warning("Failed loading %s: %s", file_path, exc)
+            else:
+                self.company_uuids = {member["value"]: member["name"] for member in ci_yaml}
         finally:
             # Ensure that an issue reading these files (which are optional, really) doesn't stop the whole show.
             self._waitingfor_load_manufacturer_ids = False
@@ -992,7 +1000,7 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
 
                         # Ensure we track this PB entity so we get source address updates.
                         if pb_entity.entity_id not in self.pb_state_sources:
-                            self.pb_state_sources[pb_entity.entity_id] = None  # FIXME: why none?
+                            self.pb_state_sources[pb_entity.entity_id] = pb_source_address
 
                         # Add metadevice to list so it gets included in update_metadevices
                         if metadevice.address not in self.metadevices:
@@ -1169,36 +1177,29 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 # Note we are setting the ref_power on the source_device, not the
                 # individual scanner entries (it will propagate to them though)
-                if source_device.ref_power != metadevice.ref_power:
+                if source_device.ref_power != metadevice.ref_power and source_device.ref_power == DEFAULT_REF_POWER:
                     source_device.set_ref_power(metadevice.ref_power)
 
                 # anything that isn't already set to something interesting, overwrite
                 # it with the new device's data.
                 for key, val in source_device.items():
-                    if val is any(
-                        [
-                            source_device.name_bt_local_name,
-                            source_device.name_bt_serviceinfo,
-                            source_device.manufacturer,
-                        ]
-                    ) and metadevice[key] in [None, False]:
+                    if val in (
+                        source_device.name_bt_local_name,
+                        source_device.name_bt_serviceinfo,
+                        source_device.manufacturer,
+                    ) and metadevice.get(key) in (None, False):
                         metadevice[key] = val
                         _want_name_update = True
-
-                if _want_name_update:
-                    metadevice.make_name()
 
                 # Anything that's VERY interesting, overwrite it regardless of what's already there:
                 # INTERESTING:
                 for key, val in source_device.items():
-                    if val is any(
-                        [
-                            source_device.beacon_major,
-                            source_device.beacon_minor,
-                            source_device.beacon_power,
-                            source_device.beacon_unique_id,
-                            source_device.beacon_uuid,
-                        ]
+                    if val in (
+                        source_device.beacon_major,
+                        source_device.beacon_minor,
+                        source_device.beacon_power,
+                        source_device.beacon_unique_id,
+                        source_device.beacon_uuid,
                     ):
                         metadevice[key] = val
                         # _want_name_update = True
@@ -1224,10 +1225,8 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
         Will return None if the area id does *not* resolve to a single
         known area name.
         """
-        areas = self.ar.async_get_area(area_id)
-        if hasattr(areas, "name"):
-            return getattr(areas, "name", "invalid_area")
-        return None
+        area = self.ar.async_get_area(area_id)
+        return area.name if area else None
 
     def _refresh_areas_by_min_distance(self):
         """Set area for ALL devices based on closest beacon."""
@@ -1630,7 +1629,7 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
             addresses += self.scanner_list
             addresses += self.options.get(CONF_DEVICES, [])
             # known IRK/Private BLE Devices
-            addresses += self.pb_state_sources
+            addresses += [addr for addr in self.pb_state_sources.values() if addr]
 
         # lowercase all the addresses for matching
         addresses = list(map(str.lower, addresses))

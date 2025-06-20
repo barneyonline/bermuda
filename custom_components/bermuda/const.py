@@ -194,6 +194,12 @@ DOCS[CONF_SMOOTHING_SAMPLES] = (
     " make for slower distance increases. 10 or 20 seems good."
 )
 
+CONF_FLOORPLAN_IMAGE = "floorplan_image"
+DOCS[CONF_FLOORPLAN_IMAGE] = "Path to the uploaded floor plan image."
+
+CONF_SCANNER_COORDS = "scanner_coordinates"
+DOCS[CONF_SCANNER_COORDS] = "Scanner x/y coordinates on the floor plan."
+
 # Defaults
 DEFAULT_NAME = DOMAIN
 

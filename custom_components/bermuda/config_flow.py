@@ -13,6 +13,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.selector import (
     DeviceSelector,
     DeviceSelectorConfig,
+    FileSelector,
+    FileSelectorConfig,
     ObjectSelector,
     SelectOptionDict,
     SelectSelector,
@@ -27,11 +29,13 @@ from .const import (
     CONF_ATTENUATION,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
+    CONF_FLOORPLAN_IMAGE,
     CONF_MAX_RADIUS,
     CONF_MAX_VELOCITY,
     CONF_REF_POWER,
     CONF_RSSI_OFFSETS,
     CONF_SAVE_AND_CLOSE,
+    CONF_SCANNER_COORDS,
     CONF_SCANNER_INFO,
     CONF_SCANNERS,
     CONF_SMOOTHING_SAMPLES,
@@ -190,6 +194,7 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
                 "selectdevices": "Select Devices",
                 "calibration1_global": "Calibration 1: Global",
                 "calibration2_scanners": "Calibration 2: Scanner RSSI Offsets",
+                "floorplan": "Floor Plan",
             },
             description_placeholders=messages,
         )
@@ -555,6 +560,28 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
             step_id="calibration2_scanners",
             data_schema=vol.Schema(data_schema),
             description_placeholders={"suffix": results_str},
+        )
+
+    async def async_step_floorplan(self, user_input=None):
+        """Configure the floor plan image and scanner coordinates."""
+        if user_input is not None:
+            self.options.update(user_input)
+            return await self._update_options()
+
+        data_schema = {
+            vol.Optional(
+                CONF_FLOORPLAN_IMAGE,
+                default=self.options.get(CONF_FLOORPLAN_IMAGE),
+            ): FileSelector(FileSelectorConfig(accept="image/*")),
+            vol.Optional(
+                CONF_SCANNER_COORDS,
+                default=self.options.get(CONF_SCANNER_COORDS, {}),
+            ): ObjectSelector(),
+        }
+
+        return self.async_show_form(
+            step_id="floorplan",
+            data_schema=vol.Schema(data_schema),
         )
 
     def _get_bermuda_device_from_registry(self, registry_id: str) -> BermudaDevice | None:

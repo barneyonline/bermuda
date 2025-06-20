@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BermudaConfigEntry) -> b
     entry.runtime_data = BermudaData(coordinator)
 
     async def on_failure():
-        _LOGGER.debug("Coordinator last update failed, rasing ConfigEntryNotReady")
+        _LOGGER.debug("Coordinator last update failed, raising ConfigEntryNotReady")
         raise ConfigEntryNotReady
 
     try:

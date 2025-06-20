@@ -42,8 +42,10 @@ from .const import (
     BDADDR_TYPE_RANDOM_STATIC,
     BDADDR_TYPE_RANDOM_UNRESOLVABLE,
     BDADDR_TYPE_UNKNOWN,
+    CONF_DEVICE_COORDS,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
+    CONF_SCANNER_COORDS,
     DEFAULT_DEVTRACK_TIMEOUT,
     DOMAIN,
     ICON_DEFAULT_AREA,
@@ -115,6 +117,11 @@ class BermudaDevice(dict):
         self.floor_name: str | None = None
         self.floor_icon: str = ICON_DEFAULT_FLOOR
         self.floor_level: str | None = None
+
+        self.coord_x: float | None = None
+        self.coord_y: float | None = None
+        self.fixed_x: float | None = None
+        self.fixed_y: float | None = None
 
         self.zone: str = STATE_NOT_HOME  # STATE_HOME or STATE_NOT_HOME
         self.manufacturer: str | None = None
@@ -702,6 +709,57 @@ class BermudaDevice(dict):
         if self.address.upper() in self.options.get(CONF_DEVICES, []):
             # We are a device we track. Flag for set-up:
             self.create_sensor = True
+
+        self.fixed_x, self.fixed_y = (
+            self.options.get(CONF_DEVICE_COORDS, {}).get(self.address.upper()) or [None, None]
+        )[:2]
+        self.calculate_position(self.options.get(CONF_SCANNER_COORDS, {}))
+
+    def calculate_position(self, scanner_coords: dict[str, list[float] | tuple[float, float]] | None):
+        """Estimate x/y position based on scanner distances."""
+        if not scanner_coords:
+            self.coord_x = None
+            self.coord_y = None
+            return
+
+        coords: list[tuple[float, float]] = []
+        dists: list[float] = []
+        for advert in self.adverts.values():
+            if advert.scanner_address in scanner_coords:
+                xy = scanner_coords[advert.scanner_address]
+                if isinstance(xy, list | tuple) and len(xy) >= 2:
+                    dist = advert.rssi_distance
+                    if dist is not None:
+                        coords.append((float(xy[0]), float(xy[1])))
+                        dists.append(float(dist))
+
+        if len(coords) < 3:
+            self.coord_x = None
+            self.coord_y = None
+            return
+
+        x1, y1 = coords[0]
+        d1 = dists[0]
+        rows = []
+        rhs = []
+        for (xi, yi), di in zip(coords[1:], dists[1:], strict=False):
+            rows.append((2 * (xi - x1), 2 * (yi - y1)))
+            rhs.append(xi**2 + yi**2 - di**2 - (x1**2 + y1**2 - d1**2))
+
+        sxx = sum(a[0] * a[0] for a in rows)
+        syy = sum(a[1] * a[1] for a in rows)
+        sxy = sum(a[0] * a[1] for a in rows)
+        sbx = sum(b * a[0] for a, b in zip(rows, rhs, strict=False))
+        sby = sum(b * a[1] for a, b in zip(rows, rhs, strict=False))
+
+        det = sxx * syy - sxy * sxy
+        if det == 0:
+            self.coord_x = None
+            self.coord_y = None
+            return
+
+        self.coord_x = (sbx * syy - sby * sxy) / det
+        self.coord_y = (sxx * sby - sbx * sxy) / det
 
     def process_advertisement(self, scanner_device: BermudaDevice, advertisementdata: AdvertisementData):
         """

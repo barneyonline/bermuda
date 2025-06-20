@@ -6,7 +6,7 @@
 
 - Track bluetooth devices by Area (Room) in [Home Assistant](https://home-assistant.io/), using [ESPHome](https://esphome.io/) [Bluetooth Proxies](https://esphome.io/components/bluetooth_proxy.html) and Shelly Gen2 or later devices.
 
-- (eventually) Triangulate device positions! Like, on a map. Maybe.
+- Visualise tracked device positions on a floor plan.
 
 
 [![GitHub Release][releases-shield]][releases]

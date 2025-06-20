@@ -27,6 +27,7 @@ from .const import (
     ADDR_TYPE_PRIVATE_BLE_DEVICE,
     BDADDR_TYPE_RANDOM_RESOLVABLE,
     CONF_ATTENUATION,
+    CONF_DEVICE_COORDS,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
     CONF_FLOORPLAN_IMAGE,
@@ -195,6 +196,7 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
                 "calibration1_global": "Calibration 1: Global",
                 "calibration2_scanners": "Calibration 2: Scanner RSSI Offsets",
                 "floorplan": "Floor Plan",
+                "devicecoords": "Device Locations",
             },
             description_placeholders=messages,
         )
@@ -583,6 +585,24 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
             step_id="floorplan",
             data_schema=vol.Schema(data_schema),
         )
+
+    async def async_step_devicecoords(self, user_input=None):
+        """Record device coordinates on the floor plan."""
+        if user_input is not None:
+            device = self._get_bermuda_device_from_registry(user_input[CONF_DEVICES])
+            if device is not None:
+                coords = self.options.get(CONF_DEVICE_COORDS, {})
+                coords[device.address] = [user_input["coord_x"], user_input["coord_y"]]
+                self.options[CONF_DEVICE_COORDS] = coords
+                return await self._update_options()
+
+        data_schema = {
+            vol.Required(CONF_DEVICES): DeviceSelector(DeviceSelectorConfig(integration=DOMAIN)),
+            vol.Required("coord_x", default=0.0): vol.Coerce(float),
+            vol.Required("coord_y", default=0.0): vol.Coerce(float),
+        }
+
+        return self.async_show_form(step_id="devicecoords", data_schema=vol.Schema(data_schema))
 
     def _get_bermuda_device_from_registry(self, registry_id: str) -> BermudaDevice | None:
         """

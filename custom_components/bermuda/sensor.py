@@ -19,6 +19,7 @@ from .const import (
     _LOGGER,
     ADDR_TYPE_IBEACON,
     ADDR_TYPE_PRIVATE_BLE_DEVICE,
+    CONF_SCANNER_COORDS,
     SIGNAL_DEVICE_NEW,
     SIGNAL_SCANNERS_CHANGED,
 )
@@ -74,6 +75,9 @@ async def async_setup_entry(
             if coordinator.have_floors:
                 entities.append(BermudaSensorFloor(coordinator, entry, address))
             entities.append(BermudaSensorRange(coordinator, entry, address))
+            if coordinator.options.get(CONF_SCANNER_COORDS):
+                entities.append(BermudaSensorCoordX(coordinator, entry, address))
+                entities.append(BermudaSensorCoordY(coordinator, entry, address))
             entities.append(BermudaSensorScanner(coordinator, entry, address))
             entities.append(BermudaSensorRssi(coordinator, entry, address))
             entities.append(BermudaSensorAreaLastSeen(coordinator, entry, address))
@@ -342,6 +346,42 @@ class BermudaSensorRange(BermudaSensor):
     def state_class(self):
         """Measurement should result in graphed results."""
         return SensorStateClass.MEASUREMENT
+
+
+class BermudaSensorCoordX(BermudaSensor):
+    """Sensor for calculated X coordinate."""
+
+    @property
+    def unique_id(self):
+        return f"{self._device.unique_id}_coord_x"
+
+    @property
+    def name(self):
+        return "X Position"
+
+    @property
+    def native_value(self):
+        if self._device.coord_x is not None:
+            return round(self._device.coord_x, 2)
+        return None
+
+
+class BermudaSensorCoordY(BermudaSensor):
+    """Sensor for calculated Y coordinate."""
+
+    @property
+    def unique_id(self):
+        return f"{self._device.unique_id}_coord_y"
+
+    @property
+    def name(self):
+        return "Y Position"
+
+    @property
+    def native_value(self):
+        if self._device.coord_y is not None:
+            return round(self._device.coord_y, 2)
+        return None
 
 
 class BermudaSensorScannerRange(BermudaSensorRange):

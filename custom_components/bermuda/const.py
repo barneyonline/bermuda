@@ -39,6 +39,7 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.DEVICE_TRACKER,
     Platform.NUMBER,
+    Platform.CAMERA,
     # Platform.BUTTON,
     # Platform.SWITCH,
     # Platform.BINARY_SENSOR
@@ -199,6 +200,10 @@ DOCS[CONF_FLOORPLAN_IMAGE] = "Path to the uploaded floor plan image."
 
 CONF_SCANNER_COORDS = "scanner_coordinates"
 DOCS[CONF_SCANNER_COORDS] = "Scanner x/y coordinates on the floor plan."
+
+CONF_DEVICE_COORDS = "device_coordinates"
+DOCS[CONF_DEVICE_COORDS] = "Device x/y coordinates pinned on the floor plan."
+
 
 # Defaults
 DEFAULT_NAME = DOMAIN

@@ -182,3 +182,40 @@ def test_compute_position_insufficient_scanners_warns(bermuda_device, caplog):
         pos = bermuda_device.compute_position(bermuda_device.options[CONF_SCANNER_COORDS])
     assert pos is None
     assert any("Triangulation requires at least 3 scanners" in r.message for r in caplog.records)
+
+
+def test_compute_position_many_scanners(bermuda_device):
+    """Test compute_position with more than three scanners."""
+    bermuda_device.options[CONF_SCANNER_COORDS] = {
+        "s1": [0.0, 0.0],
+        "s2": [2.0, 0.0],
+        "s3": [0.0, 2.0],
+        "s4": [2.0, 2.0],
+    }
+    now = monotonic_time_coarse()
+    d = 2 ** 0.5
+    bermuda_device.scanner_distance = {"s1": d, "s2": d, "s3": d, "s4": d}
+    bermuda_device.scanner_last_update = {"s1": now, "s2": now, "s3": now, "s4": now}
+
+    pos = bermuda_device.compute_position(bermuda_device.options[CONF_SCANNER_COORDS])
+    assert pos is not None
+    x, y = pos
+    assert pytest.approx(x, rel=1e-3) == 1.0
+    assert pytest.approx(y, rel=1e-3) == 1.0
+
+
+def test_compute_position_ignores_old_scanners(bermuda_device):
+    """Positions should ignore data older than max_age."""
+    bermuda_device.options[CONF_SCANNER_COORDS] = {
+        "s1": [0.0, 0.0],
+        "s2": [2.0, 0.0],
+        "s3": [0.0, 2.0],
+    }
+    now = monotonic_time_coarse()
+    bermuda_device.scanner_distance = {"s1": 1.0, "s2": 1.0, "s3": 1.0}
+    bermuda_device.scanner_last_update = {"s1": now - 5.0, "s2": now - 5.0, "s3": now}
+
+    pos = bermuda_device.compute_position(bermuda_device.options[CONF_SCANNER_COORDS])
+    assert pos is None
+
+

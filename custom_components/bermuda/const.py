@@ -204,6 +204,9 @@ DOCS[CONF_SCANNER_COORDS] = "Scanner x/y coordinates on the floor plan."
 CONF_DEVICE_COORDS = "device_coordinates"
 DOCS[CONF_DEVICE_COORDS] = "Device x/y coordinates pinned on the floor plan."
 
+CONF_ENABLE_TRIANGULATION, DEFAULT_ENABLE_TRIANGULATION = "enable_triangulation", True
+DOCS[CONF_ENABLE_TRIANGULATION] = "Toggle multi-scanner position calculation."
+
 
 # Defaults
 DEFAULT_NAME = DOMAIN

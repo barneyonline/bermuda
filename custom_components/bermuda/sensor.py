@@ -19,7 +19,9 @@ from .const import (
     _LOGGER,
     ADDR_TYPE_IBEACON,
     ADDR_TYPE_PRIVATE_BLE_DEVICE,
+    CONF_ENABLE_TRIANGULATION,
     CONF_SCANNER_COORDS,
+    DEFAULT_ENABLE_TRIANGULATION,
     SIGNAL_DEVICE_NEW,
     SIGNAL_SCANNERS_CHANGED,
 )
@@ -75,7 +77,9 @@ async def async_setup_entry(
             if coordinator.have_floors:
                 entities.append(BermudaSensorFloor(coordinator, entry, address))
             entities.append(BermudaSensorRange(coordinator, entry, address))
-            if coordinator.options.get(CONF_SCANNER_COORDS):
+            if coordinator.options.get(
+                CONF_ENABLE_TRIANGULATION, DEFAULT_ENABLE_TRIANGULATION
+            ) and coordinator.options.get(CONF_SCANNER_COORDS):
                 entities.append(BermudaSensorCoordX(coordinator, entry, address))
                 entities.append(BermudaSensorCoordY(coordinator, entry, address))
             entities.append(BermudaSensorScanner(coordinator, entry, address))
@@ -351,6 +355,8 @@ class BermudaSensorRange(BermudaSensor):
 class BermudaSensorCoordX(BermudaSensor):
     """Sensor for calculated X coordinate."""
 
+    _attr_entity_registry_enabled_default = False
+
     @property
     def unique_id(self):
         return f"{self._device.unique_id}_coord_x"
@@ -362,12 +368,14 @@ class BermudaSensorCoordX(BermudaSensor):
     @property
     def native_value(self):
         if self._device.coord_x is not None:
-            return round(self._device.coord_x, 2)
+            return round(self._device.coord_x, 1)
         return None
 
 
 class BermudaSensorCoordY(BermudaSensor):
     """Sensor for calculated Y coordinate."""
+
+    _attr_entity_registry_enabled_default = False
 
     @property
     def unique_id(self):
@@ -380,7 +388,7 @@ class BermudaSensorCoordY(BermudaSensor):
     @property
     def native_value(self):
         if self._device.coord_y is not None:
-            return round(self._device.coord_y, 2)
+            return round(self._device.coord_y, 1)
         return None
 
 

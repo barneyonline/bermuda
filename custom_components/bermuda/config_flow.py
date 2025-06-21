@@ -30,6 +30,7 @@ from .const import (
     CONF_DEVICE_COORDS,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
+    CONF_ENABLE_TRIANGULATION,
     CONF_FLOORPLAN_IMAGE,
     CONF_MAX_RADIUS,
     CONF_MAX_VELOCITY,
@@ -43,6 +44,7 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_ATTENUATION,
     DEFAULT_DEVTRACK_TIMEOUT,
+    DEFAULT_ENABLE_TRIANGULATION,
     DEFAULT_MAX_RADIUS,
     DEFAULT_MAX_VELOCITY,
     DEFAULT_REF_POWER,
@@ -236,6 +238,10 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
                 CONF_REF_POWER,
                 default=self.options.get(CONF_REF_POWER, DEFAULT_REF_POWER),
             ): vol.Coerce(float),
+            vol.Required(
+                CONF_ENABLE_TRIANGULATION,
+                default=self.options.get(CONF_ENABLE_TRIANGULATION, DEFAULT_ENABLE_TRIANGULATION),
+            ): vol.Coerce(bool),
         }
 
         return self.async_show_form(step_id="globalopts", data_schema=vol.Schema(data_schema))

@@ -31,12 +31,29 @@ Bermuda aims to let you track any bluetooth device, and have Home Assistant tell
 
 - Area-based device location (ie, device-level room prescence) is working reasonably well.
 - Creates sensors for Area and Distance for devices you choose
+- When triangulation is enabled and scanner coordinates are set,
+  creates optional X and Y position sensors for each device
+  (these sensors are disabled by default and can be enabled in the
+  entity registry)
 - Supports iBeacon devices, including those with randomised MAC addresses (like Android phones running HA Companion App)
 - Supports IRK (resolvable keys) via the [Private BLE Device](https://www.home-assistant.io/integrations/private_ble_device/) core component. Once your iOS device (or Android!) is set up in Private BLE Device, it will automatically receive Bermuda sensors as well!
+
 - Creates `device_tracker` entities for chosen devices, which can be linked to "Person"s for Home/Not Home tracking
 - Configurable settings for rssi reference level, environmental attenuation, max tracking radius
 - Provides a comprehensive json/yaml dump of devices and their distances from each bluetooth
   receiver, via the `bermuda.dump_devices` service.
+
+### Triangulation
+
+Enable **triangulation** in the integration options to compute X and Y
+coordinates from multiple scanners. Enter the coordinates of each scanner under
+"Scanner Coordinates" and calibrate RSSI settings for best results. Indoor
+trilateration is inherently noisy — expect at best around one metre accuracy in
+open areas; walls and obstacles can reduce precision.
+
+The coordinate sensors update every second and are disabled by default. Frequent
+updates may grow your history database, so you may wish to exclude the `*_coord_x`
+and `*_coord_y` sensors from the recorder.
 
 ## What you need:
 

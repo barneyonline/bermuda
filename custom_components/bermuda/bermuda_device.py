@@ -42,11 +42,17 @@ from .const import (
     BDADDR_TYPE_RANDOM_STATIC,
     BDADDR_TYPE_RANDOM_UNRESOLVABLE,
     BDADDR_TYPE_UNKNOWN,
+    CONF_ATTENUATION,
     CONF_DEVICE_COORDS,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
-    CONF_SCANNER_COORDS,
+    CONF_ENABLE_TRIANGULATION,
+    CONF_REF_POWER,
+    CONF_RSSI_OFFSETS,
+    CONF_SMOOTHING_SAMPLES,
     DEFAULT_DEVTRACK_TIMEOUT,
+    DEFAULT_ENABLE_TRIANGULATION,
+    DEFAULT_SMOOTHING_SAMPLES,
     DOMAIN,
     ICON_DEFAULT_AREA,
     ICON_DEFAULT_FLOOR,
@@ -54,7 +60,7 @@ from .const import (
     METADEVICE_PRIVATE_BLE_DEVICE,
     METADEVICE_TYPE_IBEACON_SOURCE,
 )
-from .util import mac_math_offset, mac_norm
+from .util import mac_math_offset, mac_norm, rssi_to_metres
 
 if TYPE_CHECKING:
     from bleak.backends.scanner import AdvertisementData
@@ -122,6 +128,13 @@ class BermudaDevice(dict):
         self.coord_y: float | None = None
         self.fixed_x: float | None = None
         self.fixed_y: float | None = None
+        self.position: tuple[float, float] | None = None
+
+        # Per-scanner measurement history
+        self.scanner_rssi: dict[str, float] = {}
+        self.scanner_distance: dict[str, float] = {}
+        self.scanner_distance_raw: dict[str, float] = {}
+        self.scanner_last_update: dict[str, float] = {}
 
         self.zone: str = STATE_NOT_HOME  # STATE_HOME or STATE_NOT_HOME
         self.manufacturer: str | None = None
@@ -696,6 +709,18 @@ class BermudaDevice(dict):
                     "scanner_not_instance", "Scanner device is not a BermudaDevice instance, skipping."
                 )
 
+        # Collate per-scanner measurements
+        self.scanner_rssi.clear()
+        self.scanner_distance.clear()
+        self.scanner_distance_raw.clear()
+        for advert in self.adverts.values():
+            if advert.rssi is not None:
+                self.scanner_rssi[advert.scanner_address] = advert.rssi
+            if advert.rssi_distance is not None:
+                self.scanner_distance[advert.scanner_address] = advert.rssi_distance
+            if hasattr(advert, "rssi_distance_raw") and advert.rssi_distance_raw is not None:
+                self.scanner_distance_raw[advert.scanner_address] = advert.rssi_distance_raw
+
         # Update whether this device has been seen recently, for device_tracker:
         if (
             self.last_seen is not None
@@ -713,30 +738,57 @@ class BermudaDevice(dict):
         self.fixed_x, self.fixed_y = (
             self.options.get(CONF_DEVICE_COORDS, {}).get(self.address.upper()) or [None, None]
         )[:2]
-        self.calculate_position(self.options.get(CONF_SCANNER_COORDS, {}))
+
+        if not self.options.get(CONF_ENABLE_TRIANGULATION, DEFAULT_ENABLE_TRIANGULATION):
+            self.coord_x = None
+            self.coord_y = None
+            self.position = None
 
     def calculate_position(self, scanner_coords: dict[str, list[float] | tuple[float, float]] | None):
         """Estimate x/y position based on scanner distances."""
-        if not scanner_coords:
+        pos = self.compute_position(scanner_coords)
+        if pos is None:
             self.coord_x = None
             self.coord_y = None
+            self.position = None
             return
 
+        self.coord_x, self.coord_y = pos
+        self.position = pos
+
+    def compute_position(
+        self,
+        scanner_coords: dict[str, list[float] | tuple[float, float]] | None,
+        max_age: float = 2.0,
+    ) -> tuple[float, float] | None:
+        """Return trilaterated position from per-scanner distances."""
+        if not scanner_coords:
+            return None
+
+        now = monotonic_time_coarse()
         coords: list[tuple[float, float]] = []
         dists: list[float] = []
-        for advert in self.adverts.values():
-            if advert.scanner_address in scanner_coords:
-                xy = scanner_coords[advert.scanner_address]
-                if isinstance(xy, list | tuple) and len(xy) >= 2:
-                    dist = advert.rssi_distance
-                    if dist is not None:
-                        coords.append((float(xy[0]), float(xy[1])))
-                        dists.append(float(dist))
+
+        for scanner, dist in self.scanner_distance.items():
+            if scanner not in scanner_coords:
+                continue
+            if (last := self.scanner_last_update.get(scanner)) is None:
+                continue
+            if now - last > max_age:
+                continue
+            xy = scanner_coords[scanner]
+            if not isinstance(xy, list | tuple) or len(xy) < 2:
+                continue
+            coords.append((float(xy[0]), float(xy[1])))
+            dists.append(float(dist))
 
         if len(coords) < 3:
-            self.coord_x = None
-            self.coord_y = None
-            return
+            _LOGGER_SPAM_LESS.warning(
+                f"triangulation_insufficient_{self.address}",
+                "Triangulation requires at least 3 scanners, device %s position not determined.",
+                self.address,
+            )
+            return None
 
         x1, y1 = coords[0]
         d1 = dists[0]
@@ -744,7 +796,18 @@ class BermudaDevice(dict):
         rhs = []
         for (xi, yi), di in zip(coords[1:], dists[1:], strict=False):
             rows.append((2 * (xi - x1), 2 * (yi - y1)))
-            rhs.append(xi**2 + yi**2 - di**2 - (x1**2 + y1**2 - d1**2))
+            rhs.append((d1**2 - di**2) + (xi**2 - x1**2) + (yi**2 - y1**2))
+
+        if len(rows) == 2:
+            a11, a12 = rows[0]
+            a21, a22 = rows[1]
+            b1, b2 = rhs
+            det = a11 * a22 - a12 * a21
+            if abs(det) < 1e-6:
+                return None
+            x = (b1 * a22 - b2 * a12) / det
+            y = (a11 * b2 - a21 * b1) / det
+            return (x, y)
 
         sxx = sum(a[0] * a[0] for a in rows)
         syy = sum(a[1] * a[1] for a in rows)
@@ -753,13 +816,12 @@ class BermudaDevice(dict):
         sby = sum(b * a[1] for a, b in zip(rows, rhs, strict=False))
 
         det = sxx * syy - sxy * sxy
-        if det == 0:
-            self.coord_x = None
-            self.coord_y = None
-            return
+        if abs(det) < 1e-6:
+            return None
 
-        self.coord_x = (sbx * syy - sby * sxy) / det
-        self.coord_y = (sxx * sby - sbx * sxy) / det
+        x = (sbx * syy - sby * sxy) / det
+        y = (sxx * sby - sbx * sxy) / det
+        return (x, y)
 
     def process_advertisement(self, scanner_device: BermudaDevice, advertisementdata: AdvertisementData):
         """
@@ -801,6 +863,20 @@ class BermudaDevice(dict):
         # Let's see if we should update our last_seen based on this...
         if device_advert.stamp is not None and self.last_seen < device_advert.stamp:
             self.last_seen = device_advert.stamp
+
+        # Update per-scanner RSSI and distance immediately
+        if advertisementdata.rssi is not None:
+            offset = self.options.get(CONF_RSSI_OFFSETS, {}).get(scanner_address.upper(), 0)
+            ref_power = self.ref_power or self.options.get(CONF_REF_POWER)
+            attenuation = self.options.get(CONF_ATTENUATION)
+            raw_distance = rssi_to_metres(advertisementdata.rssi + offset, ref_power, attenuation)
+            alpha = 2 / (self.options.get(CONF_SMOOTHING_SAMPLES, DEFAULT_SMOOTHING_SAMPLES) + 1)
+            prev = self.scanner_distance.get(scanner_address)
+            filtered = raw_distance if prev is None else alpha * raw_distance + (1 - alpha) * prev
+            self.scanner_distance[scanner_address] = filtered
+            self.scanner_distance_raw[scanner_address] = raw_distance
+            self.scanner_rssi[scanner_address] = advertisementdata.rssi
+            self.scanner_last_update[scanner_address] = monotonic_time_coarse()
 
     def process_manufacturer_data(self, advert: BermudaAdvert):
         """Parse manufacturer data for maker name and iBeacon etc."""

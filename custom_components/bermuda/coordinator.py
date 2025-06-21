@@ -64,14 +64,17 @@ from .const import (
     CONF_ATTENUATION,
     CONF_DEVICES,
     CONF_DEVTRACK_TIMEOUT,
+    CONF_ENABLE_TRIANGULATION,
     CONF_MAX_RADIUS,
     CONF_MAX_VELOCITY,
     CONF_REF_POWER,
     CONF_RSSI_OFFSETS,
+    CONF_SCANNER_COORDS,
     CONF_SMOOTHING_SAMPLES,
     CONF_UPDATE_INTERVAL,
     DEFAULT_ATTENUATION,
     DEFAULT_DEVTRACK_TIMEOUT,
+    DEFAULT_ENABLE_TRIANGULATION,
     DEFAULT_MAX_RADIUS,
     DEFAULT_MAX_VELOCITY,
     DEFAULT_REF_POWER,
@@ -247,6 +250,7 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
         self.options[CONF_SMOOTHING_SAMPLES] = DEFAULT_SMOOTHING_SAMPLES
         self.options[CONF_UPDATE_INTERVAL] = DEFAULT_UPDATE_INTERVAL
         self.options[CONF_RSSI_OFFSETS] = {}
+        self.options[CONF_ENABLE_TRIANGULATION] = DEFAULT_ENABLE_TRIANGULATION
 
         if hasattr(entry, "options"):
             # Firstly, on some calls (specifically during reload after settings changes)
@@ -263,6 +267,7 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
                     CONF_REF_POWER,
                     CONF_SMOOTHING_SAMPLES,
                     CONF_RSSI_OFFSETS,
+                    CONF_ENABLE_TRIANGULATION,
                 ):
                     self.options[key] = val
 
@@ -666,6 +671,8 @@ class BermudaDataUpdateCoordinator(DataUpdateCoordinator):
             for device in self.devices.values():
                 # Recalculate smoothed distances, last_seen etc
                 device.calculate_data()
+                if self.options.get(CONF_ENABLE_TRIANGULATION, DEFAULT_ENABLE_TRIANGULATION):
+                    device.calculate_position(self.options.get(CONF_SCANNER_COORDS, {}))
 
             self._refresh_areas_by_min_distance()
 

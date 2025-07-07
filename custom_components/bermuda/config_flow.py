@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import voluptuous as vol
 from bluetooth_data_tools import monotonic_time_coarse
 from homeassistant import config_entries
+from homeassistant.components.file_upload import process_uploaded_file
 from homeassistant.config_entries import OptionsFlowWithConfigEntry
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
@@ -198,6 +202,7 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
                 "calibration1_global": "Calibration 1: Global",
                 "calibration2_scanners": "Calibration 2: Scanner RSSI Offsets",
                 "floorplan": "Floor Plan",
+                "scannercoords": "Scanner Locations",
                 "devicecoords": "Device Locations",
             },
             description_placeholders=messages,
@@ -573,14 +578,31 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
     async def async_step_floorplan(self, user_input=None):
         """Configure the floor plan image and scanner coordinates."""
         if user_input is not None:
-            self.options.update(user_input)
+            if path := user_input.get(CONF_FLOORPLAN_IMAGE):
+                if not Path(path).exists():
+                    try:
+                        UUID(path)
+                    except ValueError:
+                        # Direct path entered
+                        final_path = path
+                    else:
+                        with process_uploaded_file(self.hass, path) as src:
+                            dest_dir = Path(self.hass.config.path(DOMAIN))
+                            dest_dir.mkdir(exist_ok=True)
+                            dest = dest_dir / f"{self.config_entry.entry_id}{src.suffix}"
+                            shutil.move(src, dest)
+                            final_path = str(dest.relative_to(self.hass.config.path()))
+                else:
+                    final_path = str(Path(path).relative_to(self.hass.config.path()))
+
+                self.options[CONF_FLOORPLAN_IMAGE] = final_path
+            if CONF_SCANNER_COORDS in user_input:
+                self.options[CONF_SCANNER_COORDS] = user_input[CONF_SCANNER_COORDS]
+
             return await self._update_options()
 
         data_schema = {
-            vol.Optional(
-                CONF_FLOORPLAN_IMAGE,
-                default=self.options.get(CONF_FLOORPLAN_IMAGE),
-            ): FileSelector(FileSelectorConfig(accept="image/*")),
+            vol.Optional(CONF_FLOORPLAN_IMAGE): FileSelector(FileSelectorConfig(accept="image/*")),
             vol.Optional(
                 CONF_SCANNER_COORDS,
                 default=self.options.get(CONF_SCANNER_COORDS, {}),
@@ -590,6 +612,7 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
         return self.async_show_form(
             step_id="floorplan",
             data_schema=vol.Schema(data_schema),
+            description_placeholders={"image_path": self.options.get(CONF_FLOORPLAN_IMAGE, "<none>")},
         )
 
     async def async_step_devicecoords(self, user_input=None):
@@ -609,6 +632,31 @@ class BermudaOptionsFlowHandler(OptionsFlowWithConfigEntry):
         }
 
         return self.async_show_form(step_id="devicecoords", data_schema=vol.Schema(data_schema))
+
+    async def async_step_scannercoords(self, user_input=None):
+        """Record scanner coordinates on the floor plan."""
+        if user_input is not None:
+            coords = self.options.get(CONF_SCANNER_COORDS, {})
+            coords[user_input[CONF_SCANNERS]] = [user_input["coord_x"], user_input["coord_y"]]
+            self.options[CONF_SCANNER_COORDS] = coords
+            return await self._update_options()
+
+        scanner_options = [
+            SelectOptionDict(
+                value=scanner,
+                label=self.coordinator.devices[scanner].name if scanner in self.coordinator.devices else scanner,
+            )
+            for scanner in self.coordinator.scanner_list
+        ]
+        data_schema = {
+            vol.Required(CONF_SCANNERS): SelectSelector(
+                SelectSelectorConfig(options=scanner_options, multiple=False, mode=SelectSelectorMode.DROPDOWN)
+            ),
+            vol.Required("coord_x", default=0.0): vol.Coerce(float),
+            vol.Required("coord_y", default=0.0): vol.Coerce(float),
+        }
+
+        return self.async_show_form(step_id="scannercoords", data_schema=vol.Schema(data_schema))
 
     def _get_bermuda_device_from_registry(self, registry_id: str) -> BermudaDevice | None:
         """

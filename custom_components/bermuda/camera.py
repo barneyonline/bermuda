@@ -33,21 +33,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: BermudaConfigEntry, asyn
 class BermudaFloorPlanCamera(Camera):
     """Camera entity showing device positions on the floor plan."""
 
+    _attr_has_entity_name = True
+    _attr_name = "Floor Plan"
+
     def __init__(self, coordinator: BermudaDataUpdateCoordinator, entry: BermudaConfigEntry) -> None:
         super().__init__()
         self.coordinator = coordinator
         self.entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_floorplan"
+        # Ensure HA knows we return PNG data
+        self.content_type = "image/png"
 
-    @property
-    def name(self) -> str:
-        return "Bermuda Floor Plan"
-
-    async def async_camera_image(self) -> bytes | None:
+    async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
         """Return camera image."""
         image_path = self.entry.options.get(CONF_FLOORPLAN_IMAGE)
         if not image_path:
             return None
         path = Path(image_path)
+        if not path.is_absolute():
+            path = Path(self.coordinator.hass.config.path(image_path))
         if not path.exists():
             return None
         data = await self.coordinator.hass.async_add_executor_job(path.read_bytes)
@@ -68,6 +72,12 @@ class BermudaFloorPlanCamera(Camera):
                 if device.coord_x is not None and device.coord_y is not None:
                     x, y = device.coord_x, device.coord_y
                     draw.rectangle((x - 2, y - 2, x + 2, y + 2), fill=(0, 255, 0, 192))
+        if width is not None or height is not None:
+            if width is None:
+                width = round(base.width * (height / base.height))
+            if height is None:
+                height = round(base.height * (width / base.width))
+            base = base.resize((width, height))
         out = io.BytesIO()
         base.save(out, format="PNG")
         return out.getvalue()

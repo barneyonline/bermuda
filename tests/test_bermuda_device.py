@@ -193,7 +193,7 @@ def test_compute_position_many_scanners(bermuda_device):
         "s4": [2.0, 2.0],
     }
     now = monotonic_time_coarse()
-    d = 2 ** 0.5
+    d = 2**0.5
     bermuda_device.scanner_distance = {"s1": d, "s2": d, "s3": d, "s4": d}
     bermuda_device.scanner_last_update = {"s1": now, "s2": now, "s3": now, "s4": now}
 
@@ -217,5 +217,3 @@ def test_compute_position_ignores_old_scanners(bermuda_device):
 
     pos = bermuda_device.compute_position(bermuda_device.options[CONF_SCANNER_COORDS])
     assert pos is None
-
-
